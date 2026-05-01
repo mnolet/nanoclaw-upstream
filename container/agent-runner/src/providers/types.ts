@@ -41,11 +41,14 @@ export interface QueryInput {
   cwd: string;
 
   /**
-   * System context to inject. Providers translate this into whatever their
-   * SDK expects (preset append, full system prompt, per-turn injection…).
+   * System context to inject. The `addendum` is appended to whatever
+   * base prompt the provider uses (preset, custom string, etc.) — it's
+   * the runtime tail, not the full system prompt. Built once per
+   * container start (agent identity + destinations) by the agent-runner
+   * and threaded through the poll-loop unchanged.
    */
   systemContext?: {
-    instructions?: string;
+    addendum?: string;
   };
 }
 

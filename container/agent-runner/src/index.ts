@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   // /workspace/agent/CLAUDE.md — the composed entry imports the shared
   // base (/app/CLAUDE.md) and each enabled module's fragment. Per-group
   // memory lives in /workspace/agent/CLAUDE.local.md (auto-loaded).
-  const instructions = buildSystemPromptAddendum(config.assistantName || undefined);
+  const addendum = buildSystemPromptAddendum(config.assistantName || undefined);
 
   // Discover additional directories mounted at /workspace/extra/*
   const additionalDirectories: string[] = [];
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     provider,
     providerName,
     cwd: CWD,
-    systemContext: { instructions },
+    systemContext: { addendum },
   });
 }
 
