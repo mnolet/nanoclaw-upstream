@@ -45,6 +45,14 @@ export interface ContainerConfig {
   assistantName?: string;
   /** Agent group ID — set by the host, read by the runner. */
   agentGroupId?: string;
+  /**
+   * Named agent mode for the Claude provider — `"coding"` (default) or
+   * `"personal"`. `coding` keeps the original Claude Code preset +
+   * broad allowlist; `personal` swaps in a slim messaging-agent prompt
+   * and excludes SDK builtins that collide with nanoclaw MCP tools.
+   * See `container/agent-runner/src/agent-modes.ts`.
+   */
+  agentMode?: string;
   /** Max messages per prompt. Falls back to code default if unset. */
   maxMessagesPerPrompt?: number;
 }
@@ -86,6 +94,7 @@ export function readContainerConfig(folder: string): ContainerConfig {
       groupName: raw.groupName,
       assistantName: raw.assistantName,
       agentGroupId: raw.agentGroupId,
+      agentMode: raw.agentMode,
       maxMessagesPerPrompt: raw.maxMessagesPerPrompt,
     };
   } catch (err) {

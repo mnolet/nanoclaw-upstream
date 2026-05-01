@@ -25,6 +25,12 @@ export interface ProviderOptions {
   mcpServers?: Record<string, McpServerConfig>;
   env?: Record<string, string | undefined>;
   additionalDirectories?: string[];
+  /**
+   * Named agent mode (e.g. "coding", "personal"). Provider-specific —
+   * the Claude provider uses it to pick a system-prompt + tool-list
+   * preset; other providers may ignore it. Defaults to "coding".
+   */
+  agentMode?: string;
 }
 
 export interface QueryInput {
