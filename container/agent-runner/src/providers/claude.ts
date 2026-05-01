@@ -236,7 +236,7 @@ export class ClaudeProvider implements AgentProvider {
     const stream = new MessageStream();
     stream.push(input.prompt);
 
-    const instructions = input.systemContext?.instructions;
+    const addendum = input.systemContext?.addendum;
 
     const sdkResult = sdkQuery({
       prompt: stream,
@@ -245,7 +245,7 @@ export class ClaudeProvider implements AgentProvider {
         additionalDirectories: this.additionalDirectories,
         resume: input.continuation,
         pathToClaudeCodeExecutable: '/pnpm/claude',
-        systemPrompt: this.mode.buildSystemPrompt(instructions ?? ''),
+        systemPrompt: this.mode.buildSystemPrompt(addendum ?? ''),
         allowedTools: this.mode.allowedTools,
         disallowedTools: this.mode.disallowedTools,
         env: this.env,

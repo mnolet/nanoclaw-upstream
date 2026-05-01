@@ -46,7 +46,7 @@ export interface PollLoopConfig {
   providerName: string;
   cwd: string;
   systemContext?: {
-    instructions?: string;
+    addendum?: string;
   };
 }
 
