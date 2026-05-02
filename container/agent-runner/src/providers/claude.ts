@@ -168,12 +168,115 @@ const preToolUseHook: HookCallback = async (input) => {
   return { continue: true };
 };
 
-/** Clear in-flight tool on PostToolUse / PostToolUseFailure. */
-const postToolUseHook: HookCallback = async () => {
+/**
+ * Tokenize a bash command line respecting single- and double-quoted
+ * strings. Returns the unquoted tokens. Not a full shell parser (no
+ * variable expansion, command substitution, etc.) — just enough to tell
+ * whether a literal flag like `--continue` appears as a standalone arg
+ * vs. embedded in a quoted message body.
+ */
+export function tokenizeBashCommand(cmd: string): string[] {
+  const tokens: string[] = [];
+  let cur = '';
+  let inSingle = false;
+  let inDouble = false;
+  let hasContent = false;
+
+  const flush = (): void => {
+    if (hasContent) {
+      tokens.push(cur);
+      cur = '';
+      hasContent = false;
+    }
+  };
+
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (inSingle) {
+      if (c === "'") inSingle = false;
+      else { cur += c; hasContent = true; }
+    } else if (inDouble) {
+      if (c === '"') inDouble = false;
+      else if (c === '\\' && i + 1 < cmd.length && '"\\$`'.includes(cmd[i + 1])) {
+        cur += cmd[++i]; hasContent = true;
+      } else { cur += c; hasContent = true; }
+    } else {
+      if (c === "'") { inSingle = true; hasContent = true; }
+      else if (c === '"') { inDouble = true; hasContent = true; }
+      else if (/\s/.test(c)) flush();
+      else if (c === '\\' && i + 1 < cmd.length) { cur += cmd[++i]; hasContent = true; }
+      else { cur += c; hasContent = true; }
+    }
+  }
+  flush();
+  return tokens;
+}
+
+/**
+ * Bash commands that — when invoked at the start of a Bash tool call —
+ * terminate the agent's turn without a follow-up inference round. The
+ * PostToolUse hook returns `{ continue: false }`, which the SDK honors by
+ * ending the stream after the tool result is delivered (no further model
+ * invocation). This makes "send and stop" cost one round instead of two.
+ *
+ * `send-message` is terminal by default; pass `--continue` (as a bare
+ * token, not embedded in a quoted body) to keep the turn open for
+ * mid-turn acks followed by more work.
+ *
+ * Pipelines (`cat foo | send-message --to X --text @-`) are terminal if
+ * their FINAL stage is a terminal command — this enables the pattern of
+ * piping content into send-message without the model having to read the
+ * content into its own context.
+ *
+ * Sequenced compounds (`send-message ... && something`, `;`-chains) are
+ * treated as NON-terminal — the agent clearly wants the chain to play
+ * out, and the cost of an extra inference round is cheaper than cutting
+ * a sequenced follow-up off mid-flight.
+ */
+export function isTerminalBashCommand(input: unknown): boolean {
+  const i = input as { command?: unknown };
+  if (typeof i?.command !== 'string') return false;
+  const tokens = tokenizeBashCommand(i.command);
+  if (tokens.length === 0) return false;
+
+  // Sequenced compounds: defer.
+  const SEQ = new Set(['&&', '||', ';', '&']);
+  if (tokens.some((t) => SEQ.has(t))) return false;
+
+  // Pipeline: take the final stage and apply the terminal check to it.
+  // Anything past `>`/`>>`/`<`/`<<` is a redirect target, not a stage —
+  // those don't change the "main" command identity, so just trim them.
+  let stage = tokens;
+  const lastPipe = stage.lastIndexOf('|');
+  if (lastPipe !== -1) stage = stage.slice(lastPipe + 1);
+  for (const op of ['>', '>>', '<', '<<']) {
+    const idx = stage.indexOf(op);
+    if (idx !== -1) stage = stage.slice(0, idx);
+  }
+  if (stage.length === 0) return false;
+
+  if (stage[0] === 'stay-silent') return true;
+  if (stage[0] === 'send-message') {
+    return !stage.slice(1).includes('--continue');
+  }
+  return false;
+}
+
+/**
+ * Clear in-flight tool on PostToolUse / PostToolUseFailure. Also halts
+ * the turn (`continue: false`) when the just-executed Bash command was a
+ * "terminal" bin tool — see `isTerminalBashCommand`.
+ */
+const postToolUseHook: HookCallback = async (input) => {
   try {
     clearContainerToolInFlight();
   } catch (err) {
     log(`PostToolUse: failed to clear container_state: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const i = input as { tool_name?: string; tool_input?: unknown };
+  if (i.tool_name === 'Bash' && isTerminalBashCommand(i.tool_input)) {
+    log(`PostToolUse: terminal command detected — halting turn`);
+    return { continue: false, stopReason: 'agent invoked terminal command' };
   }
   return { continue: true };
 };
