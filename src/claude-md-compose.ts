@@ -27,10 +27,12 @@ import type { AgentGroup } from './types.js';
 const SHARED_CLAUDE_MD_CONTAINER_PATH = '/app/CLAUDE.md';
 const SHARED_SKILLS_CONTAINER_BASE = '/app/skills';
 const SHARED_MCP_TOOLS_CONTAINER_BASE = '/app/src/mcp-tools';
+const SHARED_CLI_INSTRUCTIONS_CONTAINER_BASE = '/app/src/cli/_instructions';
 
 // Host-side source paths used to discover fragment sources at compose time.
 // Resolved at call time (process.cwd() = project root) so tests can swap cwd.
 const MCP_TOOLS_HOST_SUBPATH = path.join('container', 'agent-runner', 'src', 'mcp-tools');
+const CLI_INSTRUCTIONS_HOST_SUBPATH = path.join('container', 'agent-runner', 'src', 'cli', '_instructions');
 
 const COMPOSED_HEADER = '<!-- Composed at spawn — do not edit. Edit CLAUDE.local.md for per-group content. -->';
 
@@ -72,10 +74,14 @@ export function composeGroupClaudeMd(group: AgentGroup): void {
     }
   }
 
-  // Built-in module fragments — every MCP tool source file that ships a
-  // sibling `<name>.instructions.md`. These describe how the agent should
-  // use that module's MCP tools (schedule_task, install_packages, etc.).
-  // Always included — these are built-in, not toggleable.
+  // Built-in module fragments. Two sources, walked in order:
+  //   1. mcp-tools/<name>.instructions.md — covers tools still served via
+  //      MCP (currently `scheduling`).
+  //   2. cli/_instructions/<name>.instructions.md — covers tools migrated
+  //      to bash CLIs on PATH (`core`, `interactive`, `agents`, `self-mod`).
+  // Always included — these are built-in, not toggleable. If the same
+  // module name appears in both directories, cli/_instructions/ wins
+  // (mcp-tools/ should not have a stale fragment after migration).
   const mcpToolsHostDir = path.join(process.cwd(), MCP_TOOLS_HOST_SUBPATH);
   if (fs.existsSync(mcpToolsHostDir)) {
     for (const entry of fs.readdirSync(mcpToolsHostDir)) {
@@ -85,6 +91,19 @@ export function composeGroupClaudeMd(group: AgentGroup): void {
       desired.set(`module-${moduleName}.md`, {
         type: 'symlink',
         content: `${SHARED_MCP_TOOLS_CONTAINER_BASE}/${entry}`,
+      });
+    }
+  }
+
+  const cliInstructionsHostDir = path.join(process.cwd(), CLI_INSTRUCTIONS_HOST_SUBPATH);
+  if (fs.existsSync(cliInstructionsHostDir)) {
+    for (const entry of fs.readdirSync(cliInstructionsHostDir)) {
+      const match = entry.match(/^(.+)\.instructions\.md$/);
+      if (!match) continue;
+      const moduleName = match[1];
+      desired.set(`module-${moduleName}.md`, {
+        type: 'symlink',
+        content: `${SHARED_CLI_INSTRUCTIONS_CONTAINER_BASE}/${entry}`,
       });
     }
   }

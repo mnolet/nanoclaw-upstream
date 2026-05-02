@@ -104,6 +104,25 @@ RUN --mount=type=cache,target=/root/.cache/pnpm \
 RUN --mount=type=cache,target=/root/.cache/pnpm \
     pnpm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
+# ---- Agent-facing bin/ tools (formerly MCP nanoclaw__* tools) ---------------
+# Each migrated MCP tool is now a kebab-cased CLI on PATH. Same downstream
+# behavior — they speak SQLite to outbound.db (and inbound.db for blocking
+# tools like ask-user-question). One thin bash wrapper per verb forwards to
+# the matching Bun script under /app/src/cli/. Source is bind-mounted at
+# runtime, so this is purely a wrapper-installation step — bumping a tool's
+# logic doesn't require an image rebuild.
+#
+# Scheduling tools (schedule_task, list_tasks, etc.) still go through MCP
+# and are not installed here; they will move to bin/ in a follow-up PR
+# once the scheduling client is extracted.
+RUN for verb in \
+        send-message send-file edit-message add-reaction \
+        ask-user-question send-card \
+        create-agent install-packages add-mcp-server; do \
+        printf '#!/bin/bash\nexec bun /app/src/cli/%s.ts "$@"\n' "$verb" > "/usr/local/bin/$verb" && \
+        chmod +x "/usr/local/bin/$verb"; \
+    done
+
 # ---- Entrypoint --------------------------------------------------------------
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
