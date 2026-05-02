@@ -75,9 +75,24 @@ export interface AgentQuery {
   abort(): void;
 }
 
+/** Per-turn usage on the `result` event. Token fields mirror the SDK's `usage` shape. */
+export interface ResultUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  /** USD cost; undefined when SDK doesn't report it (Bedrock/Vertex/subscription auth). */
+  totalCostUsd?: number;
+  numTurns: number;
+  /** Wall-clock duration, includes tool waits (ms). */
+  durationMs: number;
+  /** API-only duration, excludes tool waits (ms). */
+  durationApiMs: number;
+}
+
 export type ProviderEvent =
   | { type: 'init'; continuation: string }
-  | { type: 'result'; text: string | null }
+  | { type: 'result'; text: string | null; usage?: ResultUsage }
   | { type: 'error'; message: string; retryable: boolean; classification?: string }
   | { type: 'progress'; message: string }
   /**

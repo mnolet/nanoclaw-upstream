@@ -8,7 +8,7 @@ import {
   setContinuation,
 } from './db/session-state.js';
 import { formatMessages, extractRouting, categorizeMessage, isClearCommand, stripInternalTags, type RoutingContext } from './formatter.js';
-import type { AgentProvider, AgentQuery, ProviderEvent } from './providers/types.js';
+import type { AgentProvider, AgentQuery, ProviderEvent, ResultUsage } from './providers/types.js';
 
 const POLL_INTERVAL_MS = 1000;
 const ACTIVE_POLL_INTERVAL_MS = 500;
@@ -19,6 +19,21 @@ function log(msg: string): void {
 
 function generateId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function formatUsage(u: ResultUsage): string {
+  // wall-api gap = tool-wait time (Bash/WebFetch/MCP)
+  const parts = [
+    `in=${u.inputTokens}`,
+    `out=${u.outputTokens}`,
+    `cache_create=${u.cacheCreationInputTokens}`,
+    `cache_read=${u.cacheReadInputTokens}`,
+    `turns=${u.numTurns}`,
+    `wall=${(u.durationMs / 1000).toFixed(1)}s`,
+    `api=${(u.durationApiMs / 1000).toFixed(1)}s`,
+  ];
+  if (typeof u.totalCostUsd === 'number') parts.push(`$${u.totalCostUsd.toFixed(4)}`);
+  return parts.join(' ');
 }
 
 export interface PollLoopConfig {
@@ -329,6 +344,7 @@ function handleEvent(event: ProviderEvent, _routing: RoutingContext): void {
       break;
     case 'result':
       log(`Result: ${event.text ? event.text.slice(0, 200) : '(empty)'}`);
+      if (event.usage) log(`Usage: ${formatUsage(event.usage)}`);
       break;
     case 'error':
       log(`Error: ${event.message} (retryable: ${event.retryable}${event.classification ? `, ${event.classification}` : ''})`);
