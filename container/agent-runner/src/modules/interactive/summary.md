@@ -3,4 +3,4 @@
 - `ask-user-question` — multi-choice buttons; BLOCKS until tap or timeout.
 - `send-card` — structured card; non-blocking.
 
-For free-text answers, just send a message. `module interactive` for JSON shapes.
+For free-text answers, just send a message. Before authoring the JSON, call `module interactive` for option/card field shapes.
