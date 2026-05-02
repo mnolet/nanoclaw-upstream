@@ -27,12 +27,12 @@ import type { AgentGroup } from './types.js';
 const SHARED_CLAUDE_MD_CONTAINER_PATH = '/app/CLAUDE.md';
 const SHARED_SKILLS_CONTAINER_BASE = '/app/skills';
 const SHARED_MCP_TOOLS_CONTAINER_BASE = '/app/src/mcp-tools';
-const SHARED_CLI_INSTRUCTIONS_CONTAINER_BASE = '/app/src/cli/_instructions';
+const SHARED_MODULES_CONTAINER_BASE = '/app/src/modules';
 
 // Host-side source paths used to discover fragment sources at compose time.
 // Resolved at call time (process.cwd() = project root) so tests can swap cwd.
 const MCP_TOOLS_HOST_SUBPATH = path.join('container', 'agent-runner', 'src', 'mcp-tools');
-const CLI_INSTRUCTIONS_HOST_SUBPATH = path.join('container', 'agent-runner', 'src', 'cli', '_instructions');
+const MODULES_HOST_SUBPATH = path.join('container', 'agent-runner', 'src', 'modules');
 
 const COMPOSED_HEADER = '<!-- Composed at spawn — do not edit. Edit CLAUDE.local.md for per-group content. -->';
 
@@ -75,13 +75,27 @@ export function composeGroupClaudeMd(group: AgentGroup): void {
   }
 
   // Built-in module fragments. Two sources, walked in order:
+  //
   //   1. mcp-tools/<name>.instructions.md — covers tools still served via
-  //      MCP (currently `scheduling`).
-  //   2. cli/_instructions/<name>.instructions.md — covers tools migrated
-  //      to bash CLIs on PATH (`core`, `interactive`, `agents`, `self-mod`).
-  // Always included — these are built-in, not toggleable. If the same
-  // module name appears in both directories, cli/_instructions/ wins
-  // (mcp-tools/ should not have a stale fragment after migration).
+  //      MCP (currently `scheduling`). The full body lands in CLAUDE.md
+  //      every turn, since the agent has no `module <name>` lookup for
+  //      MCP-served tools.
+  //
+  //   2. modules/<name>/summary.md — covers tools migrated to bash CLIs.
+  //      The summary is a brief routing cue ("call `module <name>` for
+  //      details"); the full instructions.md is fetched on demand by the
+  //      `module` bin tool. This is the lazy-loaded path that keeps the
+  //      always-on prompt small.
+  //
+  // If a module name appears in both sources, modules/<name>/summary.md
+  // wins (mcp-tools/ should not have a stale fragment after migration).
+  //
+  // Defensive logging: if either dir is unexpectedly missing or empty,
+  // the composed CLAUDE.md silently loses tool guidance. Most common
+  // cause is a dist/branch mismatch — host running a stale build that
+  // expects a path the current source tree doesn't have. Loud-warn so
+  // it surfaces during incidents instead of producing quietly broken
+  // prompts.
   const mcpToolsHostDir = path.join(process.cwd(), MCP_TOOLS_HOST_SUBPATH);
   if (fs.existsSync(mcpToolsHostDir)) {
     for (const entry of fs.readdirSync(mcpToolsHostDir)) {
@@ -95,15 +109,28 @@ export function composeGroupClaudeMd(group: AgentGroup): void {
     }
   }
 
-  const cliInstructionsHostDir = path.join(process.cwd(), CLI_INSTRUCTIONS_HOST_SUBPATH);
-  if (fs.existsSync(cliInstructionsHostDir)) {
-    for (const entry of fs.readdirSync(cliInstructionsHostDir)) {
-      const match = entry.match(/^(.+)\.instructions\.md$/);
-      if (!match) continue;
-      const moduleName = match[1];
-      desired.set(`module-${moduleName}.md`, {
+  const modulesHostDir = path.join(process.cwd(), MODULES_HOST_SUBPATH);
+  if (!fs.existsSync(modulesHostDir)) {
+    log.warn('Built-in modules dir not found — agent CLAUDE.md will have no bash-tool guidance', {
+      expected: modulesHostDir,
+      cwd: process.cwd(),
+      hint: 'likely a dist/branch mismatch — rerun `pnpm run build` and restart the host',
+    });
+  } else {
+    let moduleCount = 0;
+    for (const entry of fs.readdirSync(modulesHostDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const summaryPath = path.join(modulesHostDir, entry.name, 'summary.md');
+      if (!fs.existsSync(summaryPath)) continue;
+      desired.set(`module-${entry.name}.md`, {
         type: 'symlink',
-        content: `${SHARED_CLI_INSTRUCTIONS_CONTAINER_BASE}/${entry}`,
+        content: `${SHARED_MODULES_CONTAINER_BASE}/${entry.name}/summary.md`,
+      });
+      moduleCount++;
+    }
+    if (moduleCount === 0) {
+      log.warn('Built-in modules dir has no summary.md files — agent CLAUDE.md will have no bash-tool guidance', {
+        dir: modulesHostDir,
       });
     }
   }

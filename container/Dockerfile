@@ -118,7 +118,8 @@ RUN --mount=type=cache,target=/root/.cache/pnpm \
 RUN for verb in \
         send-message send-file edit-message add-reaction \
         ask-user-question send-card \
-        create-agent install-packages add-mcp-server; do \
+        create-agent install-packages add-mcp-server \
+        module stay-silent; do \
         printf '#!/bin/bash\nexec bun /app/src/cli/%s.ts "$@"\n' "$verb" > "/usr/local/bin/$verb" && \
         chmod +x "/usr/local/bin/$verb"; \
     done

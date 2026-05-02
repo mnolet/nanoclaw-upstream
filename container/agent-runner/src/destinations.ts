@@ -111,11 +111,7 @@ function buildDestinationsSection(): string {
       '',
       `Your messages are delivered to \`${d.name}\`${label}. Just write your response directly — no special wrapping needed.`,
       '',
-      'For mid-turn updates (an acknowledgment before a long task), call `send-message --text "<body>" --continue`. Without `--continue`, `send-message` ends the turn after delivering — use it only when you want to send and stop.',
-      '',
-      'To deliver content without reading it into your own context, pipe it: `cat /workspace/agent/draft.md | send-message --text @-`. The pipeline ending in `send-message` ends the turn (use `--continue` to keep working after).',
-      '',
-      'If you have nothing to send this turn, return an empty response.',
+      'If you have nothing to send this turn, return an empty response or run `stay-silent`.',
     ].join('\n');
   }
 
@@ -125,32 +121,15 @@ function buildDestinationsSection(): string {
     lines.push(`- \`${d.name}\`${label}`);
   }
   lines.push('');
-  lines.push('Use the `send-message` command:');
+  lines.push('Use the `send-message` command to send a message:');
   lines.push('');
   lines.push('```');
   lines.push('send-message --to <name> --text "<body>"');
   lines.push('```');
   lines.push('');
-  lines.push('**`send-message` ends your turn by default** — after the message is delivered, the SDK will not invoke you again. You only get re-prompted when there is new inbound. This is the right behavior for the common case (handle the request, send the reply, done) and saves an inference round.');
+  lines.push('Call `send-message` multiple times in one turn to message multiple destinations.');
+  lines.push('Your response text itself is not delivered anywhere — it is scratchpad, logged but not sent. You may return an empty response.');
   lines.push('');
-  lines.push('If you need to send a mid-turn update (e.g. an acknowledgment before continuing to work), pass `--continue`:');
-  lines.push('');
-  lines.push('```');
-  lines.push('send-message --to <name> --text "got it, working on it now" --continue');
-  lines.push('```');
-  lines.push('');
-  lines.push('**Pipe content straight through without reading it into your context.** `--text` accepts `@-` (stdin) or `@path` (file). Use this for any payload you do not need to inspect — drafts, logs, file dumps, large outputs:');
-  lines.push('');
-  lines.push('```');
-  lines.push('cat /workspace/agent/draft.md | send-message --to alice --text @-');
-  lines.push('grep error /workspace/agent/log.txt | send-message --to oncall --text @-');
-  lines.push('send-message --to bob --text @/workspace/agent/report.md');
-  lines.push('```');
-  lines.push('');
-  lines.push('Piping ends the turn the same way as a direct `send-message` call (the pipeline\'s final stage is what counts). Use `--continue` if you need to keep working after.');
-  lines.push('');
-  lines.push('Your response text itself is not delivered anywhere — it is scratchpad, logged but not sent. Return an empty response when your sends are done.');
-  lines.push('');
-  lines.push('If you have nothing to send this turn, return an empty response.');
+  lines.push('If you have nothing to send this turn, return an empty response or run `stay-silent`.');
   return lines.join('\n');
 }
