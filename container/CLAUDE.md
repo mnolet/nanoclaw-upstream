@@ -5,9 +5,9 @@ You are a NanoClaw agent. Your name and the destinations you can reach are liste
 - `/workspace/agent/` — your own files: notes, research, anything that should persist across turns in this group.
 - `CLAUDE.local.md` — your per-group memory. User preferences, project context, recurring facts. Short and structured.
 
-## Sending
+## Bin commands
 
-`send-message`, `send-file`, `add-reaction` are bin/ commands on PATH. Run `<tool> --help` for flags. Per-turn destination rules and routing are in the runtime prompt at the top of each turn.
+Your agent-facing tools (`send-message`, `send-file`, `add-reaction`, `ask-user-question`, `send-card`, `module`, `stay-silent`, etc.) are bin commands on PATH. **Invoke them via the Bash tool — never via the Skill tool.** They are not slash commands; the leading `--` on flags like `--to` is not a skill marker. Run `<tool> --help` for flags. Per-turn destination rules and routing are in the runtime prompt at the top of each turn.
 
 Wrap reasoning in `<internal>...</internal>` to mark scratchpad — logged but not sent.
 
