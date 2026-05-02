@@ -5,7 +5,7 @@ import { query as sdkQuery, type HookCallback, type PreCompactHookInput } from '
 
 import { clearContainerToolInFlight, setContainerToolInFlight } from '../db/connection.js';
 import { registerProvider } from './provider-registry.js';
-import type { AgentProvider, AgentQuery, McpServerConfig, ProviderEvent, ProviderOptions, QueryInput } from './types.js';
+import type { AgentProvider, AgentQuery, McpServerConfig, ProviderEvent, ProviderOptions, QueryInput, ResultUsage } from './types.js';
 
 function log(msg: string): void {
   console.error(`[claude-provider] ${msg}`);
@@ -139,6 +139,23 @@ function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | nu
     lines.push(`**${sender}**: ${content}`, '');
   }
   return lines.join('\n');
+}
+
+/** Defensive: returns undefined for synthetic results (e.g. compact-boundary) that omit usage. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractUsage(message: any): ResultUsage | undefined {
+  if (!message?.usage) return undefined;
+  const u = message.usage;
+  return {
+    inputTokens: u.input_tokens ?? 0,
+    outputTokens: u.output_tokens ?? 0,
+    cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+    cacheReadInputTokens: u.cache_read_input_tokens ?? 0,
+    totalCostUsd: typeof message.total_cost_usd === 'number' ? message.total_cost_usd : undefined,
+    numTurns: message.num_turns ?? 0,
+    durationMs: message.duration_ms ?? 0,
+    durationApiMs: message.duration_api_ms ?? 0,
+  };
 }
 
 /**
@@ -308,7 +325,7 @@ export class ClaudeProvider implements AgentProvider {
           yield { type: 'init', continuation: message.session_id };
         } else if (message.type === 'result') {
           const text = 'result' in message ? (message as { result?: string }).result ?? null : null;
-          yield { type: 'result', text };
+          yield { type: 'result', text, usage: extractUsage(message) };
         } else if (message.type === 'system' && (message as { subtype?: string }).subtype === 'api_retry') {
           yield { type: 'error', message: 'API retry', retryable: true };
         } else if (message.type === 'system' && (message as { subtype?: string }).subtype === 'rate_limit_event') {

@@ -4,7 +4,9 @@ import { initTestSessionDb, closeSessionDb, getInboundDb, getOutboundDb } from '
 import { getPendingMessages, markCompleted } from './db/messages-in.js';
 import { getUndeliveredMessages } from './db/messages-out.js';
 import { formatMessages, extractRouting } from './formatter.js';
+import { formatUsage } from './poll-loop.js';
 import { MockProvider } from './providers/mock.js';
+import type { ResultUsage } from './providers/types.js';
 
 beforeEach(() => {
   initTestSessionDb();
@@ -244,5 +246,38 @@ describe('end-to-end with mock provider', () => {
     expect(outMessages).toHaveLength(1);
     expect(JSON.parse(outMessages[0].content).text).toBe('The answer is 4');
     expect(outMessages[0].in_reply_to).toBe('m1');
+  });
+});
+
+describe('formatUsage', () => {
+  const baseUsage: ResultUsage = {
+    inputTokens: 6,
+    outputTokens: 40,
+    cacheCreationInputTokens: 26933,
+    cacheReadInputTokens: 0,
+    totalCostUsd: 0.1698,
+    numTurns: 1,
+    durationMs: 2800,
+    durationApiMs: 4000,
+  };
+
+  it('renders all fields in the documented order', () => {
+    expect(formatUsage(baseUsage)).toBe(
+      'in=6 out=40 cache_create=26933 cache_read=0 turns=1 wall=2.8s api=4.0s $0.1698',
+    );
+  });
+
+  it('omits the cost field when totalCostUsd is undefined', () => {
+    const u: ResultUsage = { ...baseUsage, totalCostUsd: undefined };
+    const out = formatUsage(u);
+    expect(out).not.toContain('$');
+    expect(out).toContain('wall=2.8s');
+    expect(out).toContain('api=4.0s');
+  });
+
+  it('formats sub-second durations with one decimal', () => {
+    const u: ResultUsage = { ...baseUsage, durationMs: 50, durationApiMs: 0 };
+    expect(formatUsage(u)).toContain('wall=0.1s');
+    expect(formatUsage(u)).toContain('api=0.0s');
   });
 });
